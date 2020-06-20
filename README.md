@@ -4,6 +4,20 @@ Automates creating backlinks to pages within collections. Helps maintain zettelk
 # When would you like to use this tool
 In case you have a collection of pages in Notion and you use the 'Link to page' feature to link one page to another, you may want to automatically backlink the latter page to the referencing one. This is usefull if you maintain a zettelkasten store where linking forward and backward is essential.
 
+# Example
+Let's assume you have a collection of 2 pages: PageA and PageB. 
+![Example collection](/docs/images/example-collection.jpg)
+
+PageA has link to PageB, but PageB is unaware of PageA.
+![PageA](/docs/images/example-pagea.jpg)
+![PageB](/docs/images/example-pageb.jpg)
+
+When you run Notion Backlinks Creator for this collection, it will automatically:
+- determine that PageA have link to PageB (or any other pages pair)
+- find if there is no backlink from PageB to PageA (or any other missing backlinks, even if you deleted them)
+- add backlink from PageB to PageA in the #Backlinks section (will create it if not exist)
+![PageB](/docs/images/example-pageb-result.jpg)
+
 # Getting started
 Follow these steps for pipenv:
 1. Download this python app
