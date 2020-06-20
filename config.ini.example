@@ -1,0 +1,17 @@
+[notion]
+;token to be found in your browser cookies name "token_v2"
+api_token = 
+;make sure you link to collection view with no filters set
+collection_url = 
+;what is your reflinks section name
+reflink_section = #Reflinks
+;what is your baclinks section name (will be created if not present)
+backlink_section = #Backlinks
+;possible styles for new backlinks section name: H1, H2, H3, TEXT
+backlink_style = TEXT
+
+[runtime]
+;possible logging levels: NOTSET, INFO, DEBUG, WARNING, ERROR, CRITICAL
+logging = NOTSET
+;enter file name if you want to create logfile
+logfile =

@@ -1,17 +1,40 @@
+import configparser
+import logging
 from notion.client import NotionClient
 from notion.block import *
 
-notion_token="1360dd09a8015eea4a08c1807a35d493578dce6f976f60e192aa0c88cab770f3f85fe4b83033be33c5e7b11ddaf6ab88efaba328dcdf81481639e09280576610714031c7f414cc1e8228d6f60b4d"
-notion_page_url = "https://www.notion.so/a5fb54d9f47545819ff0c5c26b0ca25f?v=c4bed1522240477c9407675a177d7aeb"
+appname = "Notion Backlinks Creator"
+version = "0.0.9"
 
-print("Starting Notion client v0.0.1")
+#Configuration load
+config = configparser.ConfigParser()
+config.read('config.ini')
 
-client = NotionClient(token_v2=notion_token)
+#Set logging configuration
+# logging.basicConfig(level=config.get('runtime','logging'))
+log = logging.getLogger(appname)
+log.setLevel(config.get('runtime','logging'))
 
-page = client.get_block(notion_page_url)
+#Set screen log handler
+log.addHandler(logging.StreamHandler())
 
-print(f"parent of this page is {page.parent.title}")
-print(f" page title is:{page.title}, type:{page.type}")
+#Set file log handler
+log.addHandler(logging.FileHandler(config.get('runtime','logfile'))) if config.get('runtime','logfile') else None
+
+#Notion configuration read
+notion_api_token = config.get('notion', 'api_token')
+notion_collection_url = config.get('notion', 'collection_url')
+
+#Notion user preferences read
+notion_reflink_section  = config.get('notion', 'reflink_section')
+notion_backlink_section = config.get('notion', 'backlink_section')
+
+#Welcome message
+print(f"Welcome to {appname} v{version}")
+
+#Connect to Notion api
+print(f" connecting to Notion API")
+client = NotionClient(token_v2=notion_api_token)
 
 
 # Algorytm:
@@ -22,45 +45,51 @@ print(f" page title is:{page.title}, type:{page.type}")
 # - iteruj po tablicy linków i dla każdej pary [dest,skąd] sprawdź czy istnieje para odwrotna tzn. jeśli ktoś linkuje do mnie to czy ja do niego też?
 #   - jeśli nie, utwórz na stronie dest reflinka do skąd /i może trzeba dopisać do tabeli linków na wszelki wypadek?/
 
-# TODO: przy dodawaniu wyszukać sekcję Backlinks, a jeśli jej nie ma to utworzyć, i dopiero pod nią tworzyć te backlinks_exist
+#Open given collection page
+page = client.get_block(notion_collection_url)
+print(f" loading page {page.title}")
 
+#Verify page type, must be a collection, preferrably without filters
 if page.type != 'collection_view_page':
-    print('strona z artykułami do linkowania musi być kolekcją (bazą danych)')
+    log.critical('The given page must be a collection (database), not a simple page! Exiting.')
     exit()
 
-print(f"\nOtwieram bazę {page.title}")
-cv = client.get_collection_view(notion_page_url)
+#Store all page links within collection (tuples: from.name, from.id, to.name, to.id)
+links = []
 
-links = []  #list of tuples (from.name, from.id, to.name, to.id)
+#LOAD COLLECTION AND GRAB LINKS
+cv = client.get_collection_view(notion_collection_url)
+print(f" loading collection {cv.parent.title}:{cv.name}")
 
-#SZUKAMY REFLINKÓW I BACKLIKÓW
-
+#Iterate collection elements (rows)
 for row in cv.collection.get_rows():
-    section = None
-    print(f"\nrow title:{row.title}, id:{row.id}")
+    test_for_link = False
+    log.info(f"  row [{row.id}] {row.title}")
+
+    #Iterate element children
     for child in row.children:
-        # print(f" section:{section}, child.type:{child.type}, child.title:{getattr(child, 'title', child.type)}")
+        log.debug(f"   child [{child.type}] {getattr(child, 'title', child.type)}")
 
-        #gdzie jesteśmy - czy to początek sekcji Reflinks lub Backlinks?
-        if hasattr(child, 'title') and (child.title.startswith('#Reflinks') or child.title.startswith('#Backlinks')):
-            section = 'links'
+        #Test if we reached reflink or backlink section which may contains links?
+        if hasattr(child, 'title') and (child.title.startswith(notion_reflink_section) or child.title.startswith(notion_backlink_section)):
+            test_for_link = True
             continue
 
-        #gdzie jesteśmy - jeśli w sekcji Reflinks lub Backlinks nie ma typu page (linku do strony) to to nie jest juz sekcja z linkami
-        if section == 'links' and child.type != 'page':
-            section = None
+        #If there are no more links assume we left the links section
+        if test_for_link and child.type != 'page':
+            test_for_link = False
             continue
 
-        #wyciągamy linki do stron z reflinks
-        if section == 'links' and child.type == 'page':
+        #If we are in links section test the current element for page link
+        if test_for_link and child.type == 'page':
             links.append((row.title, row.id, child.title, child.id))
+            log.debug(f"   link found from {links[-1][0]} to {links[-1][2]}")
 
 
-print(f"Znaleziono takie linki:")
-for link in links:
-    print(f" z {link[0]} do {link[2]}")
+#Inform what we have found
+print(f"  links found: {len(links)}")
 
-
+#Function for testing link's mutual pair in the links collection
 def hasPair(link, links):
     for pair in links:
         if pair[3] == link[1] and pair[1] == link[3]:
@@ -68,60 +97,71 @@ def hasPair(link, links):
     return False
 
 
-#SZUKAMY BACKLINKÓW DO UZUPEŁNIENIA
+#Store all mutual page links we have to create (tuples: from.name, from.id, to.name, to.id)
 links_to_make = []
 
+#LOOKING FOR LINKS WITHOUT MUTUAL LINKS
 for x, link in enumerate(links):
-    # print(f"{x} has pair: {hasPair(link, links)}")
     if not hasPair(link, links):
         links_to_make.append(link)
-        print(f" link {x} nie ma pary: {link[1]} do {link[3]}")
-    else:
-        print(f" link {x} ma parę")
+        log.debug(f"  no mutual link from {link[0]} to {link[2]}")
+
+#Inform if we have no backlink to create at all
+if not len(links_to_make):
+    print(f"  no backlinks to create")
+    print(f"Done.")
+    exit()
 
 
-for link in links_to_make:
-    print(f"muszę wygenerować backlink do pary z {link[0]} do {link[2]}")
-
-#sortujemy po stronie która będzie źródłem
+#Sort backlinks by source page (not really needed yet)
 links_to_make.sort(key=lambda item: item[3])
 
+print(f"  creating {len(links_to_make)} backlinks - please wait")
+
+#Set style for new backlinks section name
+backlink_styles = {"H1": HeaderBlock, "H2": SubheaderBlock, "H3": SubsubheaderBlock, "TEXT": TextBlock}
+backlink_style = backlink_styles[config.get('notion', 'backlink_style')]
+
+#Iterating all backlinks to create
 for link in links_to_make:
     page = client.get_block(link[3])
-    print(f"otwieram {page.title}")
+    log.info(f"    seeking place to backlink {page.title} to {link[0]}")
     
     backlinks_found = False
     last_backlink = None
     
+    #Iterating over all page sections
     for child in page.children:
-        # print(f" jestem w child {child.title if hasattr(child, 'title') else 'no-title'}")
-        print(f" jestem w child {getattr(child, 'title', child.type)}")
+        log.debug(f"    inside child {getattr(child, 'title', child.type)}")
         
+        #Set last known page element
         if last_backlink is None or not backlinks_found:
             last_backlink = child
 
-        #gdzie jesteśmy - czy to początek sekcji Reflinks lub Backlinks?
-        if hasattr(child, 'title') and child.title.startswith('#Backlinks'):
+        #Test if we reached backlink section which may contains links?
+        if hasattr(child, 'title') and child.title.startswith(notion_backlink_section):
             backlinks_found = True
             last_backlink = child
             continue
 
+        #Find the last link in backlinks section
         if backlinks_found and child.type == 'page':
             last_backlink = child
             continue
-            
+
+    #There were no backlinks section, adding one            
     if not backlinks_found:
-        print(f" muszę dodać sekcję #Backlinks bo nie ma")
-        #TODO tutaj dodac tworzenie sekcji #Backlinks i ustawić last_backlink na tą sekcję
+        log.debug(f"     {notion_backlink_section} section not found, adding")
+        #We add empty space before backlinks section
         new_space_block = page.children.add_new(TextBlock, title="")
-        new_backlink_block = page.children.add_new(SubsubheaderBlock, title="#Backlinks")
+        #Then add the backlinks section with configured style (H1, H2, H3 or TEXT)
+        new_backlink_block = page.children.add_new(backlink_style, title=notion_backlink_section)
         new_backlink_block.move_to(new_space_block, "after")
         last_backlink = new_backlink_block
 
-    print(f" dodaję nowy backlink z {link[2]} do {link[0]}")
+    #Actually creating the backlink
     new_block = page.children.add_alias(client.get_block(link[1]))
-    # new_block.move_to(last_backlink, "after")
+    print(f"    created backlink from {link[2]} to {link[0]}")
 
-# print(f"Znaleziono takie linki:")
-# for link in links:
-#     print(f" z {link[0]} do {link[1]}")
+print(f"Finished.")
+
