@@ -1,10 +1,10 @@
 import configparser
 import logging
 from notion.client import NotionClient
-from notion.block import *
+from notion.block import HeaderBlock, SubheaderBlock, SubsubheaderBlock, TextBlock, PageBlock
 
 appname = "Notion Backlinks Creator"
-version = "0.0.9"
+version = "1.0.1"
 
 #Configuration load
 config = configparser.ConfigParser()
@@ -35,15 +35,6 @@ print(f"Welcome to {appname} v{version}")
 #Connect to Notion api
 print(f" connecting to Notion API")
 client = NotionClient(token_v2=notion_api_token)
-
-
-# Algorytm:
-# - zrób tablicę linków: dest, skąd
-# - iteruj po wszystkich rekordach
-# - dla każdego rekordu weź wszystkie linki które w sobie zawiera
-#   - dla każdego z linków zapamiętaj go w tablicy: dokąd prowadzi i z jakiego to jest rekordu
-# - iteruj po tablicy linków i dla każdej pary [dest,skąd] sprawdź czy istnieje para odwrotna tzn. jeśli ktoś linkuje do mnie to czy ja do niego też?
-#   - jeśli nie, utwórz na stronie dest reflinka do skąd /i może trzeba dopisać do tabeli linków na wszelki wypadek?/
 
 #Open given collection page
 page = client.get_block(notion_collection_url)
@@ -116,7 +107,7 @@ if not len(links_to_make):
 #Sort backlinks by source page (not really needed yet)
 links_to_make.sort(key=lambda item: item[3])
 
-print(f"  creating {len(links_to_make)} backlinks - please wait")
+print(f"  creating {len(links_to_make)} backlink(s) - please wait")
 
 #Set style for new backlinks section name
 backlink_styles = {"H1": HeaderBlock, "H2": SubheaderBlock, "H3": SubsubheaderBlock, "TEXT": TextBlock}
