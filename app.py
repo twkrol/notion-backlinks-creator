@@ -165,7 +165,8 @@ for link in links_to_make:
         last_backlink = new_backlink_block
 
     #Actually creating the backlink
-    new_block = page.children.add_alias(client.get_block(link[1]))
+    url_in_backlink = client.get_block(link[1]).get_browseable_url()
+    new_block = page.children.add_new(TextBlock, title="[{}]({})".format(link[0], url_in_backlink))
     print(f"    created backlink from {link[2]} to {link[0]}")
 
 print(f"Finished.")
