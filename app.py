@@ -45,38 +45,54 @@ if page.type != 'collection_view_page':
     log.critical('The given page must be a collection (database), not a simple page! Exiting.')
     exit()
 
-#Store all page links within collection (tuples: from.name, from.id, to.name, to.id)
-links = []
 
 #LOAD COLLECTION AND GRAB LINKS
 cv = client.get_collection_view(notion_collection_url)
 print(f" loading collection {cv.parent.title}:{cv.name}")
 
-#Iterate collection elements (rows)
-for row in cv.collection.get_rows():
-    test_for_link = False
-    log.info(f"  row [{row.id}] {row.title}")
+# Define recursive function that parses the database: (IMPORTANT NOTE: This will parse all pages that are linked from pages in the database, so the effect of this script will go beyond justthe target database)
 
-    #Iterate element children
-    for child in row.children:
-        log.debug(f"   child [{child.type}] {getattr(child, 'title', child.type)}")
-
-        #Test if we reached reflink or backlink section which may contains links?
-        if hasattr(child, 'title') and (child.title.startswith(notion_reflink_section) or child.title.startswith(notion_backlink_section)):
-            test_for_link = True
-            continue
-
-        #If there are no more links assume we left the links section
-        if test_for_link and child.type != 'page':
-            test_for_link = False
-            continue
-
-        #If we are in links section test the current element for page link
-        if test_for_link and child.type == 'page':
-            links.append((row.title, row.id, child.title, child.id))
-            log.debug(f"   link found from {links[-1][0]} to {links[-1][2]}")
-
-
+def recursive_pass(x, last_page_visited = None):
+# returns a boolean that says whether we've found a backlinks section (if yes, then we should stop scanning the page that contains us)
+    new_last_page_visited = last_page_visited
+    if not hasattr(x, 'title'):
+        # visiting a block/page with no title.
+        return False
+    log.info(f"  x [{x.id}] {x.title}")
+    is_page = (x.type == "page")
+    if is_page: # we're visiting a page. Make sure to change the last_page_visited and to denote that we found a new link
+        if last_page_visited is not None:
+            links.add((last_page_visited["title"], last_page_visited["id"], x.title, x.id))
+            log.debug(f"   link found from ", {last_page_visited["title"]}, " to ", {x.title})
+        new_last_page_visited = {"title" : x.title, "id" : x.id}
+    if x.id in already_visited:
+        return False
+    already_visited.add(x.id)
+    if x.title.startswith(notion_backlink_section):
+        # found backlinks section. going up and skipping rest of page.
+        return True
+    # looking for links to other notion pages in this block's title:
+    if x.get("properties") is not None:
+        for snippet in x.get("properties")["title"]:
+            if snippet[0] == "‣": # found link
+                linked_node_id = snippet[1][0][1]
+                linked_block = client.get_block(linked_node_id)
+                recursive_pass(linked_block, new_last_page_visited)
+    # now visiting all the block's children:
+    for child in x.children:
+        found_backlinks_section = recursive_pass(child, new_last_page_visited)
+        if found_backlinks_section: # found backlinks section so should stop scanning the page
+            if is_page: # great, the backlinks section is the end of this page
+                return False
+            else: # go back to the containing page
+                return True            
+    return False
+# Run the recursive function:
+# Store all page links within collection (tuples: from.name, from.id, to.name, to.id)
+links = set()
+already_visited = set()
+for block in cv.collection.get_rows():
+    recursive_pass(block)
 #Inform what we have found
 print(f"  links found: {len(links)}")
 
@@ -87,12 +103,11 @@ def hasPair(link, links):
             return True
     return False
 
-
 #Store all mutual page links we have to create (tuples: from.name, from.id, to.name, to.id)
 links_to_make = []
 
 #LOOKING FOR LINKS WITHOUT MUTUAL LINKS
-for x, link in enumerate(links):
+for link in links:
     if not hasPair(link, links):
         links_to_make.append(link)
         log.debug(f"  no mutual link from {link[0]} to {link[2]}")
@@ -102,8 +117,7 @@ if not len(links_to_make):
     print(f"  no backlinks to create")
     print(f"Done.")
     exit()
-
-
+        
 #Sort backlinks by source page (not really needed yet)
 links_to_make.sort(key=lambda item: item[3])
 
@@ -155,4 +169,3 @@ for link in links_to_make:
     print(f"    created backlink from {link[2]} to {link[0]}")
 
 print(f"Finished.")
-
