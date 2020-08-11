@@ -168,7 +168,7 @@ print(f"  creating {len(links_to_make)} backlink(s) - please wait")
 
 # Now add all needed backlinks: (code below is very inefficient. can improve a lot but sorting in advance and changing to a depth-3 dictionary.)
 
-for backlink_source_page in {link[3] for link in links_to_make}:
+for backlink_source_page, backlink_source_page_title in {(link[3],link[2]) for link in links_to_make}:
     page = client.get_block(backlink_source_page)
     last_backlink = find_backlinks_section(backlink_source_page)
     #There were no backlinks section, adding one            
@@ -183,7 +183,17 @@ for backlink_source_page in {link[3] for link in links_to_make}:
     for backlink_target_page_id, backlink_target_page_title in {(link[1], link[0]) for link in links_to_make if link[3] == backlink_source_page}:
         log.info(f"going to backlink {page.title} to {backlink_target_page_title}")
         url_in_backlink = client.get_block(backlink_target_page_id).get_browseable_url()
-        backlink_target_page_new_block = last_backlink.children.add_new(TextBlock, title="linked from [{}]({}).".format(backlink_target_page_title, url_in_backlink))
+
+        # deal with the special case that backlink_target_page_title includes a link:
+        while ("(http" in backlink_target_page_title): # TODO this is probably somewhat buggy. Need to improve it. The point is that the backlink creator behaves strangely when linking to pages whose title contains a link
+            startpoint = backlink_target_page_title.find("(http")
+            endpoint = backlink_target_page_title[startpoint:].find(")") + startpoint + 1
+            backlink_target_page_title = backlink_target_page_title[:startpoint] + backlink_target_page_title[endpoint:]
+        backlink_target_page_title = backlink_target_page_title.replace("[", "").replace("]", "")
+
+        # add the link:
+        backlink_target_page_new_block = last_backlink.children.add_new(TextBlock, title="linked from [{}]({}).".format(backlink_target_page_title.replace("(", "\\(").replace("[", "\\["), url_in_backlink))
+        # add contexts from all the appearances of that link:
         for link in links_to_make:
             if link[3] != backlink_source_page: # only add links from the backlink_source_page
                 continue
@@ -193,7 +203,6 @@ for backlink_source_page in {link[3] for link in links_to_make}:
                 continue                
             new_block = backlink_target_page_new_block.children.add_new(TextBlock, title=link[4])
             # TODO: add to the context the inline link mention/link-title. right now it's being dropped.
-        print(f"    created backlinks from {link[2]} to {link[0]}")
+        print(f"    created backlinks from {backlink_source_page_title} to {backlink_target_page_title}")
 
 print(f"Finished.")
-
