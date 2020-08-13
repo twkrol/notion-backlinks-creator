@@ -2,7 +2,7 @@
 Automates creating backlinks to pages within collections. Helps maintain zettelkasten references.
 
 # When would you like to use this tool
-In case you have a collection of pages in Notion and you use the 'Link to page' feature to link one page to another, you may want to automatically backlink the latter page to the referencing one. This is usefull if you maintain a zettelkasten store where linking forward and backward is essential.
+In case you have a collection of pages in Notion and have a link from one page to another (whether it is a page-link, a page reference, a mention or a url-link), you may want to automatically backlink the latter page to the referencing one. This is usefull if you maintain a zettelkasten store where linking forward and backward is essential.
 
 # Example
 Let's assume you have a collection of 2 pages: PageA and PageB. 
@@ -30,5 +30,6 @@ Follow these steps for pipenv:
 # Disclaimer
 This tool can, and probably will modify your Notion data! It was not extensivelly tested, so any errors may occur and you may lost your data.
 For the first time run it on a simple demo collection to avoid any unwanted data modifications.
+This tool will modify collections beyond the collection you specify: it will modify all pages that can be reached from the specified collection by any combination of links, url-links, mentions, etc 
 I'm not responsible for any damages it may cause.
 *You have been warned*
