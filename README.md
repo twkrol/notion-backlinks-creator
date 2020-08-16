@@ -18,6 +18,8 @@ When you run Notion Backlinks Creator for this collection, it will automatically
 - add backlink from PageB to PageA in the #Backlinks section (will create it if not exist)
 ![PageB](/docs/images/example-pageb-result.jpg)
 
+The tool will run recursively on all pages that can be reached from the collection you specify -- including pages that are outside that collection! However, the tool will only work on pages that are in the same workspace as that collection.
+
 # Getting started
 Follow these steps for pipenv:
 1. Download this python app
